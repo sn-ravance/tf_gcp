@@ -1,1 +1,7 @@
 tf_gcp_sandbox
+.terraform
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+*.tfvars
+.terraform.tfstate.lock.info
