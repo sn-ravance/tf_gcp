@@ -1,5 +1,6 @@
 terraform {
   required_version = ">= 1.1.0"
+
   required_providers {
     google = {
       source  = "hashicorp/google"
@@ -12,6 +13,8 @@ provider "google" {
   project = var.project_id
   region  = var.region
 }
+
+
 
 resource "google_project" "sandbox" {
   project_id      = var.project_id
@@ -26,11 +29,11 @@ resource "google_project" "sandbox" {
 }
 
 resource "google_storage_bucket" "image_bucket" {
-  name     = var.image_bucket
-  location = var.image_bucket_location
+  name                        = var.image_bucket
+  location                    = var.image_bucket_location
   uniform_bucket_level_access = true
-  force_destroy = true
-  public_access_prevention = "enforced"
+  force_destroy               = true
+  public_access_prevention    = "enforced"
 
   versioning {
     enabled = true
@@ -59,11 +62,11 @@ resource "google_storage_bucket" "image_bucket" {
 }
 
 resource "google_storage_bucket" "log_sink_bucket" {
-  name     = "${var.project_id}-log-sink"
-  location = var.image_bucket_location
+  name                        = "${var.project_id}-log-sink"
+  location                    = var.image_bucket_location
   uniform_bucket_level_access = true
-  force_destroy = true
-  public_access_prevention = "enforced"
+  force_destroy               = true
+  public_access_prevention    = "enforced"
 
   versioning {
     enabled = true
@@ -86,7 +89,7 @@ resource "google_compute_network" "default" {
   }
   provider = google
   # This will attempt to delete the default network if it exists.
-  # If it does not exist, this resource will be a no-op.
+  # If it does not exist this resource will be a no-op.
   # You may need to import the default network before destroy: 
   # terraform import google_compute_network.default projects/${var.project_id}/global/networks/default
   # Or manually delete it if import fails.
@@ -95,8 +98,8 @@ resource "google_compute_network" "default" {
 
 # --- Organization Policy Constraints ---
 resource "google_org_policy_policy" "disable_guest_attributes" {
-  name     = "organizations/${var.org_id}/policies/compute.disableGuestAttributesAccess"
-  parent   = "organizations/${var.org_id}"
+  name   = "organizations/${var.org_id}/policies/compute.disableGuestAttributesAccess"
+  parent = "organizations/${var.org_id}"
   spec {
     rules {
       enforce = true
@@ -132,10 +135,10 @@ resource "google_compute_network" "secure_vpc" {
 }
 
 resource "google_compute_subnetwork" "private_subnet" {
-  name          = "private-subnet"
-  ip_cidr_range = "10.10.0.0/16"
-  region        = var.region
-  network       = google_compute_network.secure_vpc.id
+  name                     = "private-subnet"
+  ip_cidr_range            = "10.10.0.0/16"
+  region                   = var.region
+  network                  = google_compute_network.secure_vpc.id
   private_ip_google_access = true
 
   log_config {
@@ -178,7 +181,7 @@ resource "google_logging_project_sink" "all_logs" {
   project     = var.project_id
   destination = "storage.googleapis.com/${google_storage_bucket.log_sink_bucket.name}"
   filter      = "logName:*"
-  include_children = true
+
 }
 
 resource "google_storage_bucket_iam_member" "log_writer" {
@@ -187,7 +190,7 @@ resource "google_storage_bucket_iam_member" "log_writer" {
   member = "serviceAccount:${google_logging_project_sink.all_logs.writer_identity}"
 }
 
-# --- Secure Cloud SQL Instance (Postgres, Private IP, CMEK) ---
+# --- Secure Cloud SQL Instance (Postgres Private IP CMEK) ---
 resource "google_sql_database_instance" "private_postgres" {
   name             = "private-postgres"
   region           = var.region
@@ -199,57 +202,52 @@ resource "google_sql_database_instance" "private_postgres" {
     ip_configuration {
       ipv4_enabled    = false
       private_network = google_compute_network.secure_vpc.id
-      require_ssl     = true # Enforce SSL (CKV_GCP_6)
+
     }
     backup_configuration {
       enabled = true
     }
-    disk_encryption_configuration {
-      kms_key_name = var.cmek
+
+    database_flags {
+      name  = "log_connections"
+      value = "on"
     }
-    database_flags = [
-      {
-        name  = "log_connections"
-        value = "on"
-      },
-      {
-        name  = "log_disconnections"
-        value = "on"
-      },
-      {
-        name  = "log_checkpoints"
-        value = "on"
-      },
-      {
-        name  = "log_lock_waits"
-        value = "on"
-      },
-      {
-        name  = "log_hostname"
-        value = "on"
-      },
-      {
-        name  = "log_statement"
-        value = "all"
-      },
-      {
-        name  = "log_min_messages"
-        value = "error"
-      },
-      {
-        name  = "log_temp_files"
-        value = "0"
-      },
-      {
-        name  = "log_min_duration_statement"
-        value = "-1"
-      },
-      {
-        name  = "cloudsql.enable_pgaudit"
-        value = "on"
-      }
-    ]
+    database_flags {
+      name  = "log_disconnections"
+      value = "on"
+    }
+    database_flags {
+      name  = "log_statement"
+      value = "all"
+    }
+    database_flags {
+      name  = "log_min_messages"
+      value = "error"
+    }
+    database_flags {
+      name  = "log_temp_files"
+      value = "0"
+    }
+    database_flags {
+      name  = "log_min_duration_statement"
+      value = "-1"
+    }
+    database_flags {
+      name  = "cloudsql.enable_pgaudit"
+      value = "on"
+    }
   }
+
+
+
+
+
+
+
+
+
+
+
   deletion_protection = true
 }
 
@@ -260,34 +258,42 @@ resource "google_sql_user" "iam_user" {
 }
 
 # --- Vertex AI Workbench Instance (Private Endpoint) ---
-resource "google_notebooks_instance" "private_workbench" {
-  name         = "private-workbench"
-  location     = var.region
-  project      = var.project_id
-  machine_type = "n1-standard-4"
+# (commented out – provider v6 now uses google_workbench_instance)
+/*
+# resource "google_notebooks_instance" "private_workbench" {
+  # name         = "private-workbench"
+  # location     = var.region
+  # project      = var.project_id
+  # machine_type = "n1-standard-4"
 
+  # vm_image {
+  #   project      = "deeplearning-platform-release"
+  #   image_family = "tf-latest-cpu"
+  # }
   vm_image {
     project      = "deeplearning-platform-release"
     image_family = "tf-latest-cpu"
   }
 
-  boot_disk_type = "PD_STANDARD"
-  boot_disk_size_gb = 100
+  # boot_disk_type = "PD_STANDARD"
+  # boot_disk_size_gb = 100
 
   network = google_compute_network.secure_vpc.id
-  subnet  = google_compute_subnetwork.private_subnet.id
+  # subnet  = google_compute_subnetwork.private_subnet.id
 
-  no_public_ip = true
+  # no_public_ip = true
   service_account = var.custom_service_account_email
 }
 
+*/
+
 # --- Vertex AI Index (RAG Example) ---
 resource "google_vertex_ai_index" "rag_index" {
-  name     = "rag-index"
-  region   = var.region
-  project  = var.project_id
+
+  region       = var.region
+  project      = var.project_id
   display_name = "RAG Index"
-  metadata_schema_uri = "gs://google-cloud-aiplatform/schema/dataset/metadata/text_1.0.0.yaml"
+
 }
 
 module "services" {
@@ -303,6 +309,129 @@ module "services" {
     "logging.googleapis.com",
     "monitoring.googleapis.com",
     "notebooks.googleapis.com",
-    "aiplatform.googleapis.com"
+    "aiplatform.googleapis.com",
   ]
+}
+
+###############################################################################
+# Organization-wide policy
+###############################################################################
+module "organization_policy" {
+  source = "./modules/organization_policy"
+
+  org_id = var.org_id
+  # list the org-policy constraint names you want enforced
+  policy_constraints = {
+    "compute.disableGuestAttributesAccess" = true
+    "iam.disableServiceAccountKeyCreation" = true
+    "compute.requireOsLogin"               = true
+  }
+}
+
+###############################################################################
+# IAM bindings (viewer group etc.)
+###############################################################################
+module "iam" {
+  source = "./modules/iam"
+
+  project_id = var.project_id
+
+  # map of role → list of principals
+  bindings = {
+    "roles/viewer" = [
+      "group:${var.group_email}",
+    ]
+  }
+}
+
+###############################################################################
+# Service accounts for workloads / terraform
+###############################################################################
+module "service_accounts" {
+  source     = "./modules/service_accounts"
+  project_id = var.project_id
+
+  service_accounts = [
+    {
+      name         = "custom-sa"
+      display_name = "Custom Service Account"
+      description  = "Service account for sandbox workloads"
+    }
+  ]
+
+  # optional IAM role bindings for each SA
+  iam_roles = {
+    "custom-sa@${var.project_id}.iam.gserviceaccount.com" = [
+      "roles/storage.objectAdmin",
+      "roles/iam.serviceAccountTokenCreator",
+    ]
+
+  }
+}
+
+###############################################################################
+# VPC & subnet
+###############################################################################
+module "vpc" {
+  source = "./modules/vpc"
+
+  project_id = var.project_id
+  region     = var.region
+}
+
+###############################################################################
+# Central image bucket (and optional log bucket)
+###############################################################################
+module "gcs_bucket" {
+  source = "./modules/gcs_bucket"
+
+  name     = var.image_bucket
+  location = var.image_bucket_location
+  cmek     = var.cmek
+}
+
+###############################################################################
+# Centralized log sinks → bucket
+###############################################################################
+module "log_sinks" {
+  source = "./modules/log_sinks"
+
+  project_id  = var.project_id
+  sink_name   = "all-logs-to-bucket"
+  destination = "storage.googleapis.com/${var.image_bucket}"
+}
+
+###############################################################################
+# Monitoring / dashboards / alerting
+###############################################################################
+module "monitoring" {
+  source     = "./modules/monitoring"
+  project_id = var.project_id
+  region     = var.region # <-- add this line
+}
+
+###############################################################################
+# Cloud SQL (private CMEK)
+###############################################################################
+module "sql" {
+  source = "./modules/sql"
+
+  project_id      = var.project_id
+  region          = var.region
+  private_network = module.vpc.vpc_self_link
+  cmek            = var.cmek
+  iam_sql_user    = var.iam_sql_user
+}
+
+###############################################################################
+# Vertex AI resources (Workbench Index etc.)
+###############################################################################
+module "vertex_ai" {
+  source = "./modules/vertex_ai"
+
+  project_id      = var.project_id
+  region          = var.region
+  subnet          = module.vpc.subnet_self_link
+  network         = module.vpc.vpc_self_link
+  service_account = var.custom_service_account_email
 }
