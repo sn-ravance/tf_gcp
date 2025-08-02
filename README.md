@@ -149,29 +149,37 @@ terraform destroy -target=google_compute_firewall.iap_ssh
 terraform destroy -target=google_compute_firewall.allow_iap_ssh
 ```
 
-To verify that the environment is completely torn down:
+### To verify that the environment is completely torn down:
 
-Terraform state is empty
+1. Terraform state is empty
+
 ```bash
 terraform state list          # should print nothing
 ```
-A full plan shows no changes
+
+2. A full plan shows no changes
 
 ```bash
 terraform plan                # should say “No changes. Your infrastructure matches the configuration.”
 ```
-Double-check in GCP for stragglers (quick CLI checks):
+
+3. Double-check in GCP for stragglers (quick CLI checks):
+
 ```bash
 gcloud compute networks list --filter="name=secure-vpc"
 gcloud compute addresses list --filter="name=services-psc"
 gcloud services vpc-peerings list --network=secure-vpc
 gcloud sql instances list --filter="name~^private-postgres$"
 ```
+
 All commands should return no rows.
-Remove local cache if you like
+
+4. Remove local cache if you like
+
 ```bash
 rm -rf .terraform terraform.tfstate*   # optional, cleans local workspace
 ```
+
 If those checks are clear, everything managed by Terraform (and the PSC pieces) is gone.
 
 

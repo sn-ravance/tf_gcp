@@ -5,3 +5,4 @@ tf_gcp_sandbox
 *.tfstate.backup
 *.tfvars
 .terraform.tfstate.lock.info
+*.backup
