@@ -182,8 +182,6 @@ rm -rf .terraform terraform.tfstate*   # optional, cleans local workspace
 
 If those checks are clear, everything managed by Terraform (and the PSC pieces) is gone.
 
-
-
 ## Authors
 
 Written by [sealmindset](https://github.com/sealmindset)
