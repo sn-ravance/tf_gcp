@@ -265,7 +265,7 @@ resource "google_sql_database_instance" "private_postgres" {
 
 
 
-  deletion_protection = true
+  deletion_protection = false
 }
 
 resource "google_sql_user" "iam_user" {

@@ -96,51 +96,85 @@ terraform destroy
 - billing_account_key_id
 - billing_account_key_type
 
-## Outputs
+## Destroy VPC Connection
 
-- project_id
-- project_name
-- project_number
-- service_account_email
-- service_account_key
-- service_account_key_id
-- service_account_key_type
-- service_account_key_file
-- service_account_key_file_path
-- service_account_key_file_format
-- billing_account_id
-- billing_account_name
-- billing_account_number
-- billing_account_email
-- billing_account_key
-- billing_account_key_id
-- billing_account_key_type
+VPC can’t be deleted while the reserved PSC range and the VPC-peering connection exist.
 
-## Example
+Order of removal (Terraform will handle once the resources are in state):
 
-```hcl
-module "gcp_sandbox" {
-  source = "github.com/terraform-google-modules/terraform-google-sandbox"
+google_sql_database_instance.private_postgres (needs fix above)
+google_service_networking_connection.services_vpc_connection
+google_compute_global_address.services_psc
+google_compute_subnetwork.private_subnet
+google_compute_network.secure_vpc
 
-  project_id = "my-project-id"
-  project_name = "my-project-name"
-  project_number = "my-project-number"
-  service_account_email = "my-service-account-email"
-  service_account_key = "my-service-account-key"
-  service_account_key_id = "my-service-account-key-id"
-  service_account_key_type = "my-service-account-key-type"
-  service_account_key_file = "my-service-account-key-file"
-  service_account_key_file_path = "my-service-account-key-file-path"
-  service_account_key_file_format = "my-service-account-key-file-format"
-  billing_account_id = "my-billing-account-id"
-  billing_account_name = "my-billing-account-name"
-  billing_account_number = "my-billing-account-number"
-  billing_account_email = "my-billing-account-email"
-  billing_account_key = "my-billing-account-key"
-  billing_account_key_id = "my-billing-account-key-id"
-  billing_account_key_type = "my-billing-account-key-type"
-}
+If these resources are in state, a normal terraform destroy will remove them in that order. If you removed some by hand and they’re not in state, import them or use terraform state rm to drop them from state.
+
+### Quick path if you only want to tear everything down 
+
+Flip deletion_protection = false and run terraform apply.
+
+Run:
+
+```bash
+terraform destroy -target=google_service_networking_connection.services_vpc_connection
+terraform destroy -target=google_sql_database_instance.private_postgres \
+                  -target=google_sql_user.iam_user
 ```
+
+```
+gcloud compute addresses delete services-psc \
+  --global \
+  --project=keen-vision-467717-r4 --quiet
+
+gcloud services vpc-peerings delete \
+  --service=servicenetworking.googleapis.com \
+  --network=secure-vpc \
+  --project=keen-vision-467717-r4 --quiet
+
+terraform state rm google_compute_global_address.services_psc
+terraform state rm google_service_networking_connection.services_vpc_connection
+```
+
+OR
+
+```
+terraform destroy -target=google_compute_global_address.services_psc
+terraform destroy -target=google_service_networking_connection.services_vpc_connection
+
+terraform destroy -target=google_compute_subnetwork.private_subnet
+terraform destroy -target=google_compute_network.secure_vpc
+terraform destroy -target=google_compute_router.nat_router
+terraform destroy -target=google_compute_firewall.iap_ssh
+terraform destroy -target=google_compute_firewall.allow_iap_ssh
+```
+
+To verify that the environment is completely torn down:
+
+Terraform state is empty
+```bash
+terraform state list          # should print nothing
+```
+A full plan shows no changes
+
+```bash
+terraform plan                # should say “No changes. Your infrastructure matches the configuration.”
+```
+Double-check in GCP for stragglers (quick CLI checks):
+```bash
+gcloud compute networks list --filter="name=secure-vpc"
+gcloud compute addresses list --filter="name=services-psc"
+gcloud services vpc-peerings list --network=secure-vpc
+gcloud sql instances list --filter="name~^private-postgres$"
+```
+All commands should return no rows.
+Remove local cache if you like
+```bash
+rm -rf .terraform terraform.tfstate*   # optional, cleans local workspace
+```
+If those checks are clear, everything managed by Terraform (and the PSC pieces) is gone.
+
+
 
 ## Authors
 
